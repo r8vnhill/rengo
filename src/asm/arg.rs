@@ -4,6 +4,7 @@ use crate::asm::reg::Reg;
 ///
 /// The `Arg` enum is used to distinguish between different types of operands that can be used in
 /// assembly instructions. It supports both numeric constants and CPU registers as valid arguments.
+#[derive(Debug, PartialEq)]
 pub(crate) enum Arg {
     /// A numeric constant.
     ///

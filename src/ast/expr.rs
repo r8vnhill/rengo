@@ -1,4 +1,7 @@
 pub(crate) enum Expression {
-    /// Represents a number literal.
     Number(i64),
+
+    Increment(Box<Expression>),
+
+    Decrement(Box<Expression>),
 }

@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+expectest = "0.12.0"
+proptest = "1.5.0"

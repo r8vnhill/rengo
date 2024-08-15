@@ -3,6 +3,7 @@
 /// This enum is used to represent different registers within the CPU. Currently, it only includes
 /// the `Rax` register, which is typically used for storing the return value of functions or
 /// intermediate results during computation.
+#[derive(Debug, PartialEq)]
 pub(crate) enum Reg {
     /// The `Rax` register.
     ///
