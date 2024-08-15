@@ -1,4 +1,6 @@
 mod asm;
+mod ast;
+mod compiler;
 
 use std::fs;
 use std::fs::File;

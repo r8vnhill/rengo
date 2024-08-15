@@ -5,7 +5,7 @@ use crate::asm::arg::Arg;
 /// The `Instruction` enum is used to model different types of assembly instructions. Currently, it
 /// only includes the `Mov` instruction, which is used to move data between registers and/or
 /// constants.
-enum Instruction {
+pub(crate) enum Instruction {
     /// The `Mov` (move) instruction.
     ///
     /// This instruction copies data from the source argument to the destination argument. The first
