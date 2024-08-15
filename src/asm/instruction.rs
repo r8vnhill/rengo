@@ -1,6 +1,6 @@
 use crate::asm::arg::Arg;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// Represents an assembly instruction.
 ///
 /// The `Instruction` enum is used to model different types of assembly instructions. It currently

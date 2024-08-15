@@ -1,7 +1,7 @@
-use Arg::{Constant, Registry};
 use crate::asm::arg::Arg;
 use crate::asm::instruction::Instruction;
 use crate::asm::reg::Reg;
+use Arg::{Constant, Registry};
 use Instruction::{Add, Mov, Sub};
 use Reg::Rax;
 
@@ -92,3 +92,72 @@ fn reg_to_string(reg: &Reg) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use expectest::prelude::*;
+    use proptest::prelude::*;
+    use proptest::strategy::Strategy;
+    // Add this line
+    use super::*;
+
+    mod reg_to_string {
+        use super::*;
+
+        #[test]
+        fn it_converts_rax_to_string() {
+            let reg = Reg::Rax;
+            let reg_str = reg_to_string(&reg);
+            expect!(reg_str).to(be_equal_to("rax"));
+        }
+    }
+
+    mod arg_to_string {
+        use super::*;
+
+        proptest!(
+            #[test]
+            fn it_converts_constant_to_string(value in any::<i64>()) {
+                let arg = Constant(value);
+                let arg_str = arg_to_string(&arg);
+                expect!(arg_str).to(be_equal_to(value.to_string()));
+            }
+
+            #[test]
+            fn it_converts_registry_to_string(reg in prop_oneof![Just(Rax)]) {
+                let arg = Registry(reg.clone());
+                let arg_str = arg_to_string(&arg);
+                expect!(arg_str).to(be_equal_to(reg_to_string(&reg)));
+            }
+        );
+    }
+
+    mod asm_to_string {
+        use super::*;
+
+        proptest!(
+            #[test]
+            fn it_converts_instructions_to_string(
+                instructions in proptest::collection::vec(
+                    prop_oneof![
+                        any::<i64>().prop_map(|value| Mov(Registry(Rax), Constant(value))),
+                        any::<i64>().prop_map(|value| Add(Registry(Rax), Constant(value))),
+                        any::<i64>().prop_map(|value| Sub(Registry(Rax), Constant(value))),
+                    ],
+                    1..100,
+                )
+            ) {
+                let asm_code = asm_to_string(instructions.clone());
+                let expected = instructions
+                    .iter()
+                    .map(|instruction| match instruction {
+                        Mov(dest, src) => format!("mov {}, {}", arg_to_string(dest), arg_to_string(src)),
+                        Add(dest, src) => format!("add {}, {}", arg_to_string(dest), arg_to_string(src)),
+                        Sub(dest, src) => format!("sub {}, {}", arg_to_string(dest), arg_to_string(src)),
+                    })
+                    .collect::<Vec<String>>()
+                    .join("\n");
+                expect!(asm_code).to(be_equal_to(expected));
+            }
+        );
+    }
+}
