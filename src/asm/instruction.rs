@@ -1,11 +1,45 @@
 use crate::asm::arg::Arg;
 
-#[derive(Debug, PartialEq, Clone)]
 /// Represents an assembly instruction.
 ///
-/// The `Instruction` enum is used to model different types of assembly instructions. It currently
-/// supports three instructions: `Mov`, `Add`, and `Sub`.
+/// The `Instruction` enum models various types of assembly instructions that can be used in
+/// low-level programming. These instructions operate on `Arg` values, which can represent either
+/// CPU registers or numeric constants.
+///
+/// ## Variants:
+/// - `Inc(Arg)`: Increments the value in the specified argument by one.
+/// - `Dec(Arg)`: Decrements the value in the specified argument by one.
+/// - `Mov(Arg, Arg)`: Copies data from a source to a destination.
+/// - `Add(Arg, Arg)`: Adds two values and stores the result in the destination.
+/// - `Sub(Arg, Arg)`: Subtracts one value from another and stores the result in the destination.
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Instruction {
+    /// The `Inc` (increment) instruction.
+    ///
+    /// This instruction increases the value stored in the specified argument by one. The argument
+    /// can be either a register or a memory location.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Example of incrementing the value in a register
+    /// Instruction::Inc(Arg::Registry(Reg::Rax));
+    /// ```
+    Inc(Arg),
+
+    /// The `Dec` (decrement) instruction.
+    ///
+    /// This instruction decreases the value stored in the specified argument by one. The argument
+    /// can be either a register or a memory location.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Example of decrementing the value in a register
+    /// Instruction::Dec(Arg::Registry(Reg::Rax));
+    /// ```
+    Dec(Arg),
+
     /// The `Mov` (move) instruction.
     ///
     /// This instruction copies data from the source argument to the destination argument. The first

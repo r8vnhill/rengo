@@ -45,34 +45,13 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, String> {
     while let Some(&c) = chars.peek() {
         match c {
             '0'..='9' => {
-                let mut num = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c.is_digit(10) {
-                        num.push(c);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                tokens.push(Token::Number(num.parse().unwrap()));
+                tokens.push(parse_number(&mut chars)?);
             }
             '+' => {
-                chars.next(); // Consume the first '+'
-                if chars.peek() == Some(&'+') {
-                    chars.next(); // Consume the second '+'
-                    tokens.push(Token::Increment);
-                } else {
-                    return Err("Invalid token: Expected '++'".to_string());
-                }
+                tokens.push(parse_increment(&mut chars)?);
             }
             '-' => {
-                chars.next(); // Consume the first '-'
-                if chars.peek() == Some(&'-') {
-                    chars.next(); // Consume the second '-'
-                    tokens.push(Token::Decrement);
-                } else {
-                    return Err("Invalid token: Expected '--'".to_string());
-                }
+                tokens.push(parse_decrement(&mut chars)?);
             }
             '(' => {
                 tokens.push(Token::LParen);
@@ -82,8 +61,19 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, String> {
                 tokens.push(Token::RParen);
                 chars.next();
             }
-            c if c.is_whitespace() => {
+            '=' => {
+                tokens.push(Token::Assign);
                 chars.next();
+            }
+            ';' => {
+                tokens.push(Token::LineEnd);
+                chars.next();
+            }
+            c if c.is_whitespace() => {
+                chars.next(); // Skip whitespace
+            }
+            c if c.is_alphabetic() => {
+                tokens.push(parse_identifier_or_keyword(&mut chars)?);
             }
             _ => {
                 return Err(format!("Invalid character: {}", c));
@@ -94,46 +84,241 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, String> {
     Ok(tokens)
 }
 
+fn parse_number(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
+    let mut num = String::new();
+
+    // Check for an optional leading '-'
+    if let Some(&c) = chars.peek() {
+        if c == '-' {
+            num.push(c);
+            chars.next();
+        }
+    }
+
+    while let Some(&c) = chars.peek() {
+        if c.is_digit(10) {
+            num.push(c);
+            chars.next();
+        } else {
+            break;
+        }
+    }
+
+    // After parsing the number, ensure the next character is not alphabetic.
+    if let Some(&next_char) = chars.peek() {
+        if next_char.is_alphabetic() {
+            return Err(format!("Invalid token following number: {}", next_char));
+        }
+    }
+
+    num.parse()
+        .map(Token::Number)
+        .map_err(|_| format!("Failed to parse number: {}", num))
+}
+
+fn parse_increment(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
+    chars.next(); // Consume the first '+'
+    if chars.peek() == Some(&'+') {
+        chars.next(); // Consume the second '+'
+        Ok(Token::Increment)
+    } else {
+        Err("Invalid token: Expected '++'".to_string())
+    }
+}
+
+fn parse_decrement(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
+    chars.next(); // Consume the first '-'
+    if chars.peek() == Some(&'-') {
+        chars.next(); // Consume the second '-'
+        Ok(Token::Decrement)
+    } else {
+        Err("Invalid token: Expected '--'".to_string())
+    }
+}
+
+fn parse_identifier_or_keyword(
+    chars: &mut std::iter::Peekable<std::str::Chars>,
+) -> Result<Token, String> {
+    let mut identifier = String::new();
+    while let Some(&c) = chars.peek() {
+        if c.is_alphanumeric() || c == '_' {
+            identifier.push(c);
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    match identifier.as_str() {
+        "let" => Ok(Token::Let),
+        _ => Ok(Token::Identifier(identifier)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use expectest::prelude::*;
+    use proptest::prelude::*;
     use super::*;
 
-    #[test]
-    fn test_tokenize() {
-        // Test number tokenization
-        let result = tokenize("123").unwrap();
-        expect!(result).to(be_equal_to(vec![Token::Number(123)]));
+    mod parse_number {
+        use super::*;
 
-        // Test increment tokenization
-        let result = tokenize("++").unwrap();
-        expect!(result).to(be_equal_to(vec![Token::Increment]));
+        proptest!(
+            #[test]
+            fn parses_any_number(n: i64) {
+                let input = n.to_string();
+                let result = parse_number(&mut input.chars().peekable()).unwrap();
+                prop_assert_eq!(result, Token::Number(n));
+            }
+        );
+    }
 
-        // Test decrement tokenization
-        let result = tokenize("--").unwrap();
-        expect!(result).to(be_equal_to(vec![Token::Decrement]));
+    mod parse_increment {
+        use super::*;
 
-        // Test mixed tokens
-        let result = tokenize("123 ++ -- ( )").unwrap();
-        expect!(result).to(be_equal_to(vec![
-            Token::Number(123),
-            Token::Increment,
-            Token::Decrement,
-            Token::LParen,
-            Token::RParen,
-        ]));
+        #[test]
+        fn parses_increment() {
+            let input = "++";
+            let result = parse_increment(&mut input.chars().peekable()).unwrap();
+            expect!(result).to(be_equal_to(Token::Increment));
+        }
 
-        // Test invalid tokenization
-        let result = tokenize("++-");
-        expect!(result).to(be_err());
+        #[test]
+        fn fails_on_single_plus() {
+            let input = "+";
+            let result = parse_increment(&mut input.chars().peekable());
+            expect!(result).to(be_err());
+        }
+    }
 
-        let result = tokenize("++ +");
-        expect!(result).to(be_err());
+    mod parse_decrement {
+        use super::*;
 
-        let result = tokenize("-- -");
-        expect!(result).to(be_err());
+        #[test]
+        fn parses_decrement() {
+            let input = "--";
+            let result = parse_decrement(&mut input.chars().peekable()).unwrap();
+            expect!(result).to(be_equal_to(Token::Decrement));
+        }
 
-        let result = tokenize("abc");
-        expect!(result).to(be_err());
+        #[test]
+        fn fails_on_single_minus() {
+            let input = "-";
+            let result = parse_decrement(&mut input.chars().peekable());
+            expect!(result).to(be_err());
+        }
+    }
+
+    mod parse_identifier_or_keyword {
+        use super::*;
+
+        #[test]
+        fn parses_let_keyword() {
+            let input = "let";
+            let result = parse_identifier_or_keyword(&mut input.chars().peekable()).unwrap();
+            expect!(result).to(be_equal_to(Token::Let));
+        }
+
+        #[test]
+        fn parses_identifier() {
+            let input = "foo";
+            let result = parse_identifier_or_keyword(&mut input.chars().peekable()).unwrap();
+            expect!(result).to(be_equal_to(Token::Identifier("foo".to_string())));
+        }
+    }
+
+    mod tokenize {
+        use super::*;
+
+        #[test]
+        fn tokenizes_numbers() {
+            let input = "123";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::Number(123)]));
+        }
+
+        #[test]
+        fn tokenizes_increment() {
+            let input = "++";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::Increment]));
+        }
+
+        #[test]
+        fn tokenizes_decrement() {
+            let input = "--";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::Decrement]));
+        }
+
+        #[test]
+        fn tokenizes_parentheses() {
+            let input = "()";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::LParen, Token::RParen]));
+        }
+
+        #[test]
+        fn tokenizes_assignment() {
+            let input = "=";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::Assign]));
+        }
+
+        #[test]
+        fn tokenizes_line_end() {
+            let input = ";";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::LineEnd]));
+        }
+
+        #[test]
+        fn ignores_whitespace() {
+            let input = "  123  ";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::Number(123)]));
+        }
+
+        #[test]
+        fn tokenizes_identifiers() {
+            let input = "foo";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::Identifier("foo".to_string())]));
+        }
+
+        #[test]
+        fn tokenizes_let_keyword() {
+            let input = "let";
+            let result = tokenize(input);
+            expect!(result).to(be_ok().value(vec![Token::Let]));
+        }
+
+        #[test]
+        fn fails_on_invalid_character() {
+            let input = "!";
+            let result = tokenize(input);
+            expect!(result).to(be_err());
+        }
+
+        #[test]
+        fn fails_on_invalid_increment() {
+            let input = "+";
+            let result = tokenize(input);
+            expect!(result).to(be_err());
+        }
+
+        #[test]
+        fn fails_on_invalid_decrement() {
+            let input = "-";
+            let result = tokenize(input);
+            expect!(result).to(be_err());
+        }
+
+        #[test]
+        fn fails_on_invalid_number() {
+            let input = "123a";
+            let result = tokenize(input);
+            expect!(result).to(be_err());
+        }
     }
 }

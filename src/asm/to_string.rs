@@ -3,7 +3,7 @@ use crate::asm::instruction::Instruction;
 use crate::asm::reg::Reg;
 use Arg::{Constant, Registry};
 use Instruction::{Add, Mov, Sub};
-use Reg::Rax;
+use Reg::{Rax, Rsp};
 
 /// Converts a vector of assembly `Instruction`s into a formatted assembly code string.
 ///
@@ -30,6 +30,8 @@ pub(crate) fn asm_to_string(instructions: Vec<Instruction>) -> String {
     instructions
         .iter()
         .map(|instruction| match instruction {
+            Instruction::Inc(dest) => format!("inc {}", arg_to_string(dest)),
+            Instruction::Dec(dest) => format!("dec {}", arg_to_string(dest)),
             Mov(dest, src) => format!("mov {}, {}", arg_to_string(dest), arg_to_string(src)),
             Add(dest, src) => format!("add {}, {}", arg_to_string(dest), arg_to_string(src)),
             Sub(dest, src) => format!("sub {}, {}", arg_to_string(dest), arg_to_string(src)),
@@ -62,6 +64,7 @@ fn arg_to_string(arg: &Arg) -> String {
     match arg {
         Constant(value) => value.to_string(),
         Registry(reg) => reg_to_string(reg),
+        Arg::RegistryOffset(reg, offset) => format!("{} + {}", reg_to_string(reg), offset),
     }
 }
 
@@ -89,16 +92,17 @@ fn arg_to_string(arg: &Arg) -> String {
 fn reg_to_string(reg: &Reg) -> String {
     match reg {
         Rax => "rax".to_string(),
+        Rsp => "rsp".to_string(),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    // Add this line
+    use super::*;
     use expectest::prelude::*;
     use proptest::prelude::*;
     use proptest::strategy::Strategy;
-    // Add this line
-    use super::*;
 
     mod reg_to_string {
         use super::*;
@@ -150,6 +154,8 @@ mod tests {
                 let expected = instructions
                     .iter()
                     .map(|instruction| match instruction {
+                        Instruction::Inc(dest) => format!("inc {}", arg_to_string(dest)),
+                        Instruction::Dec(dest) => format!("dec {}", arg_to_string(dest)),
                         Mov(dest, src) => format!("mov {}, {}", arg_to_string(dest), arg_to_string(src)),
                         Add(dest, src) => format!("add {}, {}", arg_to_string(dest), arg_to_string(src)),
                         Sub(dest, src) => format!("sub {}, {}", arg_to_string(dest), arg_to_string(src)),

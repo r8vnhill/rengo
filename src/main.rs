@@ -2,6 +2,7 @@ mod asm;
 mod ast;
 mod compiler;
 mod parser;
+mod env;
 
 use std::fs;
 use std::fs::File;
@@ -113,5 +114,5 @@ fn link(obj_output_path: &Path, exe_output_path: &Path) -> Result<(), Box<dyn st
 }
 
 fn compile(program: Expression) -> Result<Vec<Instruction>, ()> {
-    compile_expression(&program)
+    compile_expression(&program, &mut env::Env::new())
 }
