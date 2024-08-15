@@ -1,12 +1,19 @@
 mod asm;
 mod ast;
 mod compiler;
+mod parser;
 
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use crate::asm::instruction::Instruction;
+use crate::asm::to_string::asm_to_string;
+use crate::ast::expr::Expression;
+use crate::compiler::compile::compile_expression;
+use crate::parser::parse::parse;
+use crate::parser::tokenize;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = parse_args()?;
@@ -17,7 +24,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let obj_output_path = create_output_paths("build/obj/", "out.obj")?;
     let exe_output_path = create_output_paths("build/", "out.exe")?;
 
-    write_assembly(&asm_output_path, &assembly)?;
+    let prelude = "section .text\n\
+                   global _start\n\
+                   _start:\n";
+    let asm = format!("{}\n{}", prelude, asm_to_string(assembly.unwrap()));
+    let ret = "ret\n";
+    let compiled_asm = format!("{}\n{}", asm, ret);
+    write_assembly(&asm_output_path, &compiled_asm)?;
     assemble(&asm_output_path, &obj_output_path)?;
     link(&obj_output_path, &exe_output_path)?;
 
@@ -33,12 +46,13 @@ fn parse_args() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(args)
 }
 
-fn read_program(input_path: &str) -> Result<i64, Box<dyn std::error::Error>> {
+fn read_program(input_path: &str) -> Result<Expression, Box<dyn std::error::Error>> {
     let input_file = File::open(input_path).expect("Failed to open input file");
     let reader = io::BufReader::new(input_file);
     let input_program = reader.lines().next().ok_or("Error: empty input file")??;
-    let program = input_program.parse::<i64>().map_err(|_| "Error: invalid program")?;
-    Ok(program)
+    let program = tokenize::tokenize(&input_program)?;
+    let ast = parse(&program)?;
+    Ok(ast)
 }
 
 fn create_output_paths(dir: &str, file_name: &str) -> Result<PathBuf, io::Error> {
@@ -98,14 +112,6 @@ fn link(obj_output_path: &Path, exe_output_path: &Path) -> Result<(), Box<dyn st
     Ok(())
 }
 
-fn compile(program: i64) -> String {
-    format!(
-        "
-section .text
-global _start
-_start:
-  mov RAX, {}
-  ret\n",
-        program
-    )
+fn compile(program: Expression) -> Result<Vec<Instruction>, ()> {
+    compile_expression(&program)
 }

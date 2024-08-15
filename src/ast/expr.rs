@@ -4,6 +4,7 @@
 /// assembly instructions or evaluated. It supports numeric literals as well as increment and
 /// decrement operations, allowing for simple arithmetic operations to be represented in a
 /// structured way.
+#[derive(Debug, PartialEq)]
 pub(crate) enum Expression {
     /// A numeric literal.
     ///

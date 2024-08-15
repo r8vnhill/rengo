@@ -51,7 +51,7 @@ use Reg::Rax;
 ///     Instruction::Sub(Arg::Registry(Reg::Rax), Arg::Constant(1))
 /// ]);
 /// ```
-fn compile_expression(expression: &Expression) -> Result<Vec<Instruction>, ()> {
+pub(crate) fn compile_expression(expression: &Expression) -> Result<Vec<Instruction>, ()> {
     match expression {
         Number(value) => Ok(vec![Mov(Registry(Rax), Constant(*value))]),
         Increment(expr) => {
