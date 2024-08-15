@@ -17,8 +17,30 @@ pub(crate) enum Token {
     /// ```
     Number(i64),
 
+    /// The increment operator (`++`).
+    ///
+    /// This variant represents the increment operation in the expression. It is used to increase the
+    /// value of an expression by one. This token is created when the tokenizer encounters the `++`
+    /// sequence of characters.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let token = Token::Increment;
+    /// ```
     Increment,
 
+    /// The decrement operator (`--`).
+    ///
+    /// This variant represents the decrement operation in the expression. It is used to decrease the
+    /// value of an expression by one. This token is created when the tokenizer encounters the `--`
+    /// sequence of characters.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let token = Token::Decrement;
+    /// ```
     Decrement,
 
     /// The left parenthesis (`(`).

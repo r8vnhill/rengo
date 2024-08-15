@@ -1,15 +1,16 @@
 /// Represents an arithmetic expression.
 ///
-/// The `Expression` enum is used to model basic arithmetic expressions that can be compiled into
-/// assembly instructions or evaluated. It supports numeric literals as well as increment and
-/// decrement operations, allowing for simple arithmetic operations to be represented in a
-/// structured way.
+/// The `Expression` enum models basic arithmetic expressions, which can be evaluated or compiled
+/// into assembly instructions. It supports numeric literals, increment, decrement operations,
+/// variable identifiers, and let-bindings, allowing for a structured and flexible representation
+/// of arithmetic operations and simple expressions.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Expression {
     /// A numeric literal.
     ///
-    /// The `Number` variant holds a 64-bit integer (`i64`) that represents a constant value in the
-    /// expression. This variant is used for representing explicit numbers.
+    /// The `Number` variant stores a 64-bit integer (`i64`), representing a constant numeric value
+    /// within the expression. This variant is essential for representing explicit numeric values
+    /// in arithmetic expressions.
     ///
     /// # Example
     ///
@@ -21,8 +22,8 @@ pub(crate) enum Expression {
     /// An increment operation.
     ///
     /// The `Increment` variant represents an arithmetic operation that increases the value of the
-    /// contained expression by one. The expression to be incremented is stored in a `Box` to allow
-    /// for recursive structures.
+    /// contained expression by one. The expression to be incremented is stored in a `Box`, allowing
+    /// for recursive expressions such as nested operations.
     ///
     /// # Example
     ///
@@ -34,8 +35,8 @@ pub(crate) enum Expression {
     /// A decrement operation.
     ///
     /// The `Decrement` variant represents an arithmetic operation that decreases the value of the
-    /// contained expression by one. The expression to be decremented is stored in a `Box` to allow
-    /// for recursive structures.
+    /// contained expression by one. The expression to be decremented is stored in a `Box`, enabling
+    /// complex and nested expressions within the arithmetic operation.
     ///
     /// # Example
     ///
@@ -43,4 +44,35 @@ pub(crate) enum Expression {
     /// let expr = Expression::Decrement(Box::new(Expression::Number(42)));
     /// ```
     Decrement(Box<Expression>),
+
+    /// A variable identifier.
+    ///
+    /// The `Identifier` variant stores a `String` representing the name of a variable. This variant
+    /// is used to reference variables in expressions, enabling more dynamic and flexible arithmetic
+    /// operations that depend on variable values.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let expr = Expression::Identifier("x".to_string());
+    /// ```
+    Identifier(String),
+
+    /// A let-binding expression.
+    ///
+    /// The `Let` variant represents a let-binding, where a variable is assigned an expression's value
+    /// and is available within a scope. The first `String` is the variable name, the first `Box<Expression>`
+    /// is the value to be bound, and the second `Box<Expression>` is the expression where the variable
+    /// is available.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let expr = Expression::Let(
+    ///     "x".to_string(),
+    ///     Box::new(Expression::Number(42)),
+    ///     Box::new(Expression::Identifier("x".to_string()))
+    /// );
+    /// ```
+    Let(String, Box<Expression>, Box<Expression>),
 }
