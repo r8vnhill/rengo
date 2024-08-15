@@ -3,6 +3,8 @@ mod ast;
 mod compiler;
 mod parser;
 mod env;
+mod assemble;
+mod tests;
 
 use std::fs;
 use std::fs::File;
@@ -11,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use crate::asm::instruction::Instruction;
 use crate::asm::to_string::asm_to_string;
+use crate::assemble::assemble;
 use crate::ast::expr::Expression;
 use crate::compiler::compile::compile_expression;
 use crate::parser::parse::parse;
@@ -56,7 +59,7 @@ fn read_program(input_path: &str) -> Result<Expression, Box<dyn std::error::Erro
     Ok(ast)
 }
 
-fn create_output_paths(dir: &str, file_name: &str) -> Result<PathBuf, io::Error> {
+pub(crate) fn create_output_paths(dir: &str, file_name: &str) -> Result<PathBuf, io::Error> {
     let output_dir = Path::new(dir);
     fs::create_dir_all(output_dir)?;
     Ok(output_dir.join(file_name))
@@ -64,22 +67,6 @@ fn create_output_paths(dir: &str, file_name: &str) -> Result<PathBuf, io::Error>
 
 fn write_assembly(asm_output_path: &Path, assembly: &str) -> Result<(), io::Error> {
     fs::write(asm_output_path, assembly).expect("Failed to write assembly file");
-    Ok(())
-}
-
-fn assemble(asm_output_path: &Path, obj_output_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let format = match std::env::consts::OS {
-        "windows" => "win64",
-        "linux" => "elf64",
-        "macos" => "macho64",
-        _ => return Err("Unsupported operating system".into()),
-    };
-
-    Command::new("nasm")
-        .args(&["-f", format, asm_output_path.to_str().unwrap(), "-o", obj_output_path.to_str().unwrap()])
-        .status()
-        .expect("Failed to assemble .asm to .obj");
-
     Ok(())
 }
 

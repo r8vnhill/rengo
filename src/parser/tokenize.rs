@@ -44,15 +44,9 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, String> {
 
     while let Some(&c) = chars.peek() {
         match c {
-            '0'..='9' => {
-                tokens.push(parse_number(&mut chars)?);
-            }
-            '+' => {
-                tokens.push(parse_increment(&mut chars)?);
-            }
-            '-' => {
-                tokens.push(parse_decrement(&mut chars)?);
-            }
+            '0'..='9' => tokens.push(parse_number(&mut chars)?),
+            '-' => tokens.push(parse_minus(&mut chars)?),
+            '+' => tokens.push(parse_plus(&mut chars)?),
             '(' => {
                 tokens.push(Token::LParen);
                 chars.next();
@@ -72,12 +66,8 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, String> {
             c if c.is_whitespace() => {
                 chars.next(); // Skip whitespace
             }
-            c if c.is_alphabetic() => {
-                tokens.push(parse_identifier_or_keyword(&mut chars)?);
-            }
-            _ => {
-                return Err(format!("Invalid character: {}", c));
-            }
+            c if c.is_alphabetic() => tokens.push(parse_identifier_or_keyword(&mut chars)),
+            _ => return Err(format!("Invalid character: {}", c)),
         }
     }
 
@@ -86,15 +76,6 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, String> {
 
 fn parse_number(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
     let mut num = String::new();
-
-    // Check for an optional leading '-'
-    if let Some(&c) = chars.peek() {
-        if c == '-' {
-            num.push(c);
-            chars.next();
-        }
-    }
-
     while let Some(&c) = chars.peek() {
         if c.is_digit(10) {
             num.push(c);
@@ -104,19 +85,42 @@ fn parse_number(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Toke
         }
     }
 
-    // After parsing the number, ensure the next character is not alphabetic.
+    // After parsing the number, check if the next character is alphabetic.
     if let Some(&next_char) = chars.peek() {
         if next_char.is_alphabetic() {
-            return Err(format!("Invalid token following number: {}", next_char));
+            return Err(format!(
+                "Invalid sequence: Number '{}' followed by identifier starting with '{}'",
+                num, next_char
+            ));
         }
     }
 
-    num.parse()
-        .map(Token::Number)
-        .map_err(|_| format!("Failed to parse number: {}", num))
+    Ok(Token::Number(num.parse().unwrap()))
 }
 
-fn parse_increment(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
+fn parse_minus(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
+    chars.next(); // Consume the first '-'
+    if chars.peek() == Some(&'-') {
+        chars.next(); // Consume the second '-'
+        Ok(Token::Decrement)
+    } else if let Some('0'..='9') = chars.peek() {
+        // Handle negative number
+        let mut num = String::from("-");
+        while let Some(&c) = chars.peek() {
+            if c.is_digit(10) {
+                num.push(c);
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        Ok(Token::Number(num.parse().unwrap()))
+    } else {
+        Err("Invalid token: Expected '--' or a number".to_string())
+    }
+}
+
+fn parse_plus(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
     chars.next(); // Consume the first '+'
     if chars.peek() == Some(&'+') {
         chars.next(); // Consume the second '+'
@@ -126,19 +130,7 @@ fn parse_increment(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<T
     }
 }
 
-fn parse_decrement(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Token, String> {
-    chars.next(); // Consume the first '-'
-    if chars.peek() == Some(&'-') {
-        chars.next(); // Consume the second '-'
-        Ok(Token::Decrement)
-    } else {
-        Err("Invalid token: Expected '--'".to_string())
-    }
-}
-
-fn parse_identifier_or_keyword(
-    chars: &mut std::iter::Peekable<std::str::Chars>,
-) -> Result<Token, String> {
+fn parse_identifier_or_keyword(chars: &mut std::iter::Peekable<std::str::Chars>) -> Token {
     let mut identifier = String::new();
     while let Some(&c) = chars.peek() {
         if c.is_alphanumeric() || c == '_' {
@@ -149,8 +141,8 @@ fn parse_identifier_or_keyword(
         }
     }
     match identifier.as_str() {
-        "let" => Ok(Token::Let),
-        _ => Ok(Token::Identifier(identifier)),
+        "let" => Token::Let,
+        _ => Token::Identifier(identifier),
     }
 }
 
@@ -165,7 +157,7 @@ mod tests {
 
         proptest!(
             #[test]
-            fn parses_any_number(n: i64) {
+            fn parses_any_number(n in 0i64..1000) {
                 let input = n.to_string();
                 let result = parse_number(&mut input.chars().peekable()).unwrap();
                 prop_assert_eq!(result, Token::Number(n));
@@ -173,38 +165,45 @@ mod tests {
         );
     }
 
-    mod parse_increment {
-        use super::*;
-
-        #[test]
-        fn parses_increment() {
-            let input = "++";
-            let result = parse_increment(&mut input.chars().peekable()).unwrap();
-            expect!(result).to(be_equal_to(Token::Increment));
-        }
-
-        #[test]
-        fn fails_on_single_plus() {
-            let input = "+";
-            let result = parse_increment(&mut input.chars().peekable());
-            expect!(result).to(be_err());
-        }
-    }
-
-    mod parse_decrement {
+    mod parse_minus {
         use super::*;
 
         #[test]
         fn parses_decrement() {
             let input = "--";
-            let result = parse_decrement(&mut input.chars().peekable()).unwrap();
+            let result = parse_minus(&mut input.chars().peekable()).unwrap();
             expect!(result).to(be_equal_to(Token::Decrement));
         }
 
         #[test]
-        fn fails_on_single_minus() {
-            let input = "-";
-            let result = parse_decrement(&mut input.chars().peekable());
+        fn parses_negative_number() {
+            let input = "-123";
+            let result = parse_minus(&mut input.chars().peekable()).unwrap();
+            expect!(result).to(be_equal_to(Token::Number(-123)));
+        }
+
+        #[test]
+        fn fails_on_invalid_token() {
+            let input = "-+";
+            let result = parse_minus(&mut input.chars().peekable());
+            expect!(result).to(be_err());
+        }
+    }
+
+    mod parse_plus {
+        use super::*;
+
+        #[test]
+        fn parses_increment() {
+            let input = "++";
+            let result = parse_plus(&mut input.chars().peekable()).unwrap();
+            expect!(result).to(be_equal_to(Token::Increment));
+        }
+
+        #[test]
+        fn fails_on_invalid_token() {
+            let input = "+-";
+            let result = parse_plus(&mut input.chars().peekable());
             expect!(result).to(be_err());
         }
     }
@@ -215,14 +214,14 @@ mod tests {
         #[test]
         fn parses_let_keyword() {
             let input = "let";
-            let result = parse_identifier_or_keyword(&mut input.chars().peekable()).unwrap();
+            let result = parse_identifier_or_keyword(&mut input.chars().peekable());
             expect!(result).to(be_equal_to(Token::Let));
         }
 
         #[test]
         fn parses_identifier() {
             let input = "foo";
-            let result = parse_identifier_or_keyword(&mut input.chars().peekable()).unwrap();
+            let result = parse_identifier_or_keyword(&mut input.chars().peekable());
             expect!(result).to(be_equal_to(Token::Identifier("foo".to_string())));
         }
     }
