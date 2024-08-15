@@ -45,45 +45,149 @@ pub fn parse(tokens: &[Token]) -> Result<Expression, String> {
     Ok(expression)
 }
 
-/// Parses an expression from the token stream. In this basic implementation, an expression is
-/// equivalent to a term, which can be a factor followed by increment (`++`) or decrement (`--`)
-/// operations.
+/// Parses an expression from the token stream.
+///
+/// The `parse_expression` function is a core component of a recursive descent parser, responsible
+/// for interpreting a sequence of tokens as an abstract syntax tree (AST). This function supports
+/// both simple arithmetic expressions and more complex constructs like `let` bindings.
 ///
 /// ## Usage:
-/// This function is typically used as part of a recursive descent parser to parse expressions
-/// within a mathematical expression. Currently, the implementation is a placeholder that directly
-/// delegates to `parse_term`.
+/// This function identifies the type of expression starting at the given index in the token stream
+/// and delegates the parsing to the appropriate helper function. If the expression begins with a
+/// `let` keyword, it calls `parse_let` to handle the `let` binding. Otherwise, it processes the
+/// expression as a term (a factor potentially followed by increment (`++`) or decrement (`--`)
+/// operations).
 ///
-/// ### Example 1: Parsing a simple term
+/// ### Example 1: Parsing a simple numeric expression
 /// ```rust
 /// let tokens = vec![Token::Number(5)];
 /// let result = parse_expression(&tokens, 0);
 /// assert_eq!(result, Ok((Expression::Number(5), 1)));
 /// ```
 ///
-/// ### Example 2: Parsing a term with increment
+/// ### Example 2: Parsing an expression with increment
 /// ```rust
 /// let tokens = vec![Token::Number(5), Token::Increment];
 /// let result = parse_expression(&tokens, 0);
 /// assert_eq!(result, Ok((Expression::Increment(Box::new(Expression::Number(5))), 2)));
 /// ```
 ///
-/// ### Example 3: Parsing a term with decrement
+/// ### Example 3: Parsing a `let` binding expression
 /// ```rust
-/// let tokens = vec![Token::Number(5), Token::Decrement];
-/// let result = parse_expression(& tokens, 0);
-/// assert_eq!(result, Ok((Expression::Decrement(Box::new(Expression::Number(5))), 2)));
+/// let tokens = vec![
+///     Token::Let,
+///     Token::Identifier("x".to_string()),
+///     Token::Assign,
+///     Token::Number(5),
+///     Token::LineEnd,
+///     Token::Identifier("x".to_string())
+/// ];
+/// let result = parse_expression(&tokens, 0);
+/// assert_eq!(
+///     result,
+///     Ok((
+///         Expression::Let(
+///             "x".to_string(),
+///             Box::new(Expression::Number(5)),
+///             Box::new(Expression::Identifier("x".to_string()))
+///         ),
+///         6
+///     ))
+/// );
+/// ```
+///
+/// ## Parameters:
+/// - `tokens`: A slice of tokens representing the input expression to be parsed.
+/// - `index`: The starting index in the token stream where the expression begins.
+///
+/// ## Returns:
+/// A `Result` containing:
+/// - A tuple with the parsed `Expression` and the index of the next token to parse, if successful.
+/// - A `String` error message if parsing fails.
+///
+/// ## Errors:
+/// - Returns an error if the token stream does not form a valid expression.
+/// - Returns an error if the token stream contains syntax issues like missing `;`, `=`, or
+///     parentheses.
+fn parse_expression(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
+    if let Some(Token::Let) = tokens.get(index) {
+        parse_let(tokens, index + 1)
+    } else {
+        parse_term(tokens, index)
+    }
+}
+
+/// Parses a `let` expression from the token stream.
+///
+/// The `parse_let` function is responsible for parsing `let` bindings in the form of:
+///
+/// ```text
+/// let x = <expression>;
+/// ```
+///
+/// It processes the identifier, the assignment operator, the expression to be assigned, and the
+/// body of the `let` binding. This function returns an `Expression::Let` variant containing the
+/// parsed components and the index of the next token to be parsed.
+///
+/// ## Usage:
+/// This function is typically called when a `let` keyword is encountered in the token stream
+/// during the parsing process. It expects the `let` keyword to be followed by an identifier, an
+/// assignment operator (`=`), an expression, a line-end (`;`), and then the body expression.
+///
+/// ### Example:
+/// ```rust
+/// let tokens = vec![
+///     Token::Let,
+///     Token::Identifier("x".to_string()),
+///     Token::Assign,
+///     Token::Number(5),
+///     Token::LineEnd,
+///     Token::Identifier("x".to_string())
+/// ];
+/// let result = parse_let(&tokens, 1);
+/// assert_eq!(
+///     result,
+///     Ok((
+///         Expression::Let(
+///             "x".to_string(),
+///             Box::new(Expression::Number(5)),
+///             Box::new(Expression::Identifier("x".to_string()))
+///         ),
+///         6
+///     ))
+/// );
 /// ```
 ///
 /// ## Parameters:
 /// - `tokens`: A slice of tokens representing the input to parse.
-/// - `index`: The index in the token stream to start parsing from.
+/// - `index`: The index in the token stream where the `let` expression starts.
 ///
 /// ## Returns:
-/// A `Result` containing a tuple with the parsed `Expression` and the index of the next token to
-/// parse, or a `String` error message if parsing fails.
-fn parse_expression(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
-    parse_term(tokens, index)
+/// A `Result` containing a tuple with the parsed `Expression::Let` and the index of the next token
+/// to be parsed, or a `String` error message if parsing fails.
+///
+/// ## Errors:
+/// - Returns an error if the expected identifier is missing after the `let` keyword.
+/// - Returns an error if the assignment operator (`=`) is missing after the identifier.
+/// - Returns an error if the line-end (`;`) is missing after the assigned expression.
+/// - Returns an error if there are issues parsing the expression or the body of the `let` binding.
+fn parse_let(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
+    if let Some(Token::Identifier(ref name)) = tokens.get(index) {
+        let next_index = index + 1;
+        if let Some(Token::Assign) = tokens.get(next_index) {
+            let (value_expr, body_start) = parse_expression(tokens, next_index + 1)?;
+            if let Some(Token::LineEnd) = tokens.get(body_start) {
+                let (body_expr, final_index) = parse_expression(tokens, body_start + 1)?;
+                Ok((Expression::Let(name.clone(), Box::new(value_expr), Box::new(body_expr)), final_index))
+            } else {
+                Err("Expected ';' at the end of let binding".to_string())
+            }
+        } else {
+            Err("Expected '=' in let binding".to_string())
+        }
+    } else {
+        Err("Expected identifier after 'let'".to_string())
+    }
 }
 
 /// Parses a term from the token stream, which can consist of a factor followed by increment (`++`)
@@ -187,6 +291,7 @@ fn parse_term(tokens: &[Token], index: usize) -> Result<(Expression, usize), Str
 fn parse_factor(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
     match tokens.get(index) {
         Some(Token::Number(value)) => Ok((Expression::Number(*value), index + 1)),
+        Some(Token::Identifier(ref name)) => Ok((Expression::Identifier(name.clone()), index + 1)),
         Some(Token::LParen) => {
             let (expression, next_index) = parse_expression(tokens, index + 1)?;
             match tokens.get(next_index) {
@@ -236,6 +341,14 @@ mod tests {
             let result = parse_factor(&tokens, 0);
             expect!(result).to(be_err().value("Unexpected end of input"));
         }
+
+        #[test]
+        fn identifier() {
+            let tokens = vec![Token::Identifier("x".to_string())];
+            let (expression, next_index) = parse_factor(&tokens, 0).unwrap();
+            expect!(expression).to(be_equal_to(Expression::Identifier("x".to_string())));
+            expect!(next_index).to(be_equal_to(1));
+        }
     }
 
     mod parse_term {
@@ -283,6 +396,25 @@ mod tests {
             let (expression, next_index) = parse_expression(&tokens, 0).unwrap();
             expect!(expression).to(be_equal_to(Expression::Decrement(Box::new(Expression::Number(42)))));
             expect!(next_index).to(be_equal_to(2));
+        }
+
+        #[test]
+        fn let_binding() {
+            let tokens = vec![
+                Token::Let,
+                Token::Identifier("x".to_string()),
+                Token::Assign,
+                Token::Number(5),
+                Token::LineEnd,
+                Token::Identifier("x".to_string())
+            ];
+            let (expression, next_index) = parse_expression(&tokens, 0).unwrap();
+            expect!(expression).to(be_equal_to(Expression::Let(
+                "x".to_string(),
+                Box::new(Expression::Number(5)),
+                Box::new(Expression::Identifier("x".to_string()))
+            )));
+            expect!(next_index).to(be_equal_to(6));
         }
     }
 

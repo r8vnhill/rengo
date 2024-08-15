@@ -64,7 +64,7 @@ fn arg_to_string(arg: &Arg) -> String {
     match arg {
         Constant(value) => value.to_string(),
         Registry(reg) => reg_to_string(reg),
-        Arg::RegistryOffset(reg, offset) => format!("{} + {}", reg_to_string(reg), offset),
+        Arg::RegistryOffset(reg, offset) => format!("[{} + {}]", reg_to_string(reg), 8 * offset),
     }
 }
 
