@@ -14,7 +14,7 @@ use std::process::Command;
 use crate::asm::instruction::Instruction;
 use crate::asm::to_string::asm_to_string;
 use crate::assemble::assemble;
-use crate::ast::expr::Expression;
+use crate::ast::expression::Expression;
 use crate::compiler::compile::compile_expression;
 use crate::parser::parse::parse;
 use crate::parser::tokenize;
@@ -50,7 +50,7 @@ fn parse_args() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(args)
 }
 
-fn read_program(input_path: &str) -> Result<Expression, Box<dyn std::error::Error>> {
+fn read_program<T>(input_path: &str) -> Result<Expression<T>, Box<dyn std::error::Error>> {
     let input_file = File::open(input_path).expect("Failed to open input file");
     let reader = io::BufReader::new(input_file);
     let input_program = reader.lines().next().ok_or("Error: empty input file")??;
@@ -100,6 +100,6 @@ fn link(obj_output_path: &Path, exe_output_path: &Path) -> Result<(), Box<dyn st
     Ok(())
 }
 
-fn compile(program: Expression) -> Result<Vec<Instruction>, ()> {
+fn compile<T>(program: Expression<T>) -> Result<Vec<Instruction>, ()> {
     compile_expression(&program, &mut env::Env::new())
 }

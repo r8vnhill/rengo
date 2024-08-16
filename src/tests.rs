@@ -1,8 +1,8 @@
-use crate::ast::expr::Expression;
+use crate::ast::expression::Expression;
 use crate::create_output_paths;
 
 fn parse_compile_and_assemble(program: String) -> Result<(), Box<dyn std::error::Error>> {
-    let ast = crate::parser::parse::parse(&crate::parser::tokenize::tokenize(&program)?)?;
+    let ast: Expression<&str> = crate::parser::parse::parse(&crate::parser::tokenize::tokenize(&program)?)?;
     let assembly = crate::compiler::compile::compile_expression(&ast, &mut Default::default());
     let asm_output_path = create_output_paths("build/test/", "out.asm")?;
     let obj_output_path = create_output_paths("build/test/", "out.obj")?;

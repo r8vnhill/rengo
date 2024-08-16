@@ -3,13 +3,11 @@ use crate::asm::arg::Arg::Constant;
 use crate::asm::instruction::Instruction;
 use crate::asm::instruction::Instruction::{Dec, Inc, Mov};
 use crate::asm::reg::Reg;
-use crate::ast::expr::Expression;
-use Arg::{Registry, RegistryOffset};
-use Expression::{Decrement, Identifier, Increment, Let, Number};
-use Instruction::{Add, Sub};
-use Reg::Rax;
-use crate::asm::reg::Reg::Rsp;
+use crate::ast::expression::Expression;
+use crate::compiler::compile::Reg::Rsp;
 use crate::env::{add, Env};
+use Arg::{Registry, RegistryOffset};
+use Reg::Rax;
 
 /// Compiles an `Expression` into a sequence of `Instruction`s.
 ///
@@ -84,34 +82,38 @@ use crate::env::{add, Env};
 /// The `Identifier` variant expects the variable to have been previously defined in the
 /// environment. If the identifier is not found, the function may return an error or panic depending
 /// on the implementation.
-pub(crate) fn compile_expression(expression: &Expression, env: &mut Env) -> Result<Vec<Instruction>, ()> {
+pub(crate) fn compile_expression<T>(expression: &Expression<T>, env: &mut Env) -> Result<Vec<Instruction>, ()> {
     match expression {
-        Expression::Number(value) => Ok(vec![Instruction::Mov(Arg::Registry(Reg::Rax), Arg::Constant(*value))]),
-        Expression::Increment(expr) => {
+        Expression::Number(value, _) => Ok(vec![Instruction::Mov(Arg::Registry(Reg::Rax), Arg::Constant(*value))]),
+        Expression::Increment(expr, _) => {
             let mut instructions = compile_expression(expr, env)?;
             instructions.push(Instruction::Inc(Arg::Registry(Reg::Rax)));
             Ok(instructions)
-        },
-        Expression::Decrement(expr) => {
+        }
+        Expression::Decrement(expr, _) => {
             let mut instructions = compile_expression(expr, env)?;
             instructions.push(Instruction::Dec(Arg::Registry(Reg::Rax)));
             Ok(instructions)
-        },
-        Expression::Let(identifier, value, body) => {
+        }
+        Expression::Let(identifier, value, body, _) => {
             let slot = add(identifier.clone(), env);  // Add returns the slot directly, not a new env
             let mut instructions = compile_expression(value, env)?;  // Continue using the same env
             instructions.push(Instruction::Mov(
                 Arg::RegistryOffset(Reg::Rsp, -slot),  // Correctly calculate the offset
-                Arg::Registry(Reg::Rax)
+                Arg::Registry(Reg::Rax),
             ));
             let mut body_instructions = compile_expression(body, env)?;
             instructions.append(&mut body_instructions);
             Ok(instructions)
-        },
+        }
 
-        Expression::Identifier(identifier) => {
+        Expression::Identifier(identifier, _) => {
             let slot = env.get(identifier).ok_or(())?;
             Ok(vec![Mov(Registry(Rax), RegistryOffset(Rsp, -*slot))])
+        }
+
+        Expression::If(condition, then, else_, _) => {
+            unimplemented!()
         }
     }
 }
@@ -121,18 +123,20 @@ mod tests {
     use super::*;
     use expectest::prelude::*;
     use proptest::prelude::*;
+    use crate::ast::increment::Increment;
+    use crate::ast::number::Number;
 
     proptest!(
         #[test]
         fn test_compile_expression_number(value in any::<i64>()) {
-            let expr = Number(value);
+            let expr = Number::new(value, ());
             let instructions = compile_expression(&expr, & mut Env::new()).unwrap();
             expect!(instructions).to(be_equal_to(vec![Mov(Registry(Rax), Constant(value))]));
         }
 
         #[test]
         fn test_compile_expression_increment(value in any::<i64>()) {
-            let expr = Increment(Box::new(Number(value)));
+            let expr = Increment::new(Box::new(Number::new(value, ())), ());
             let instructions = compile_expression(&expr, & mut Env::new()).unwrap();
             expect!(instructions).to(be_equal_to(vec![
                 Mov(Registry(Rax), Constant(value)),
@@ -142,7 +146,7 @@ mod tests {
 
         #[test]
         fn test_compile_expression_decrement(value in any::<i64>()) {
-            let expr = Decrement(Box::new(Expression::Number(value)));
+            let expr = Decrement(Box::new(Expression::Number(value, ())), ());
             let instructions = compile_expression(&expr, & mut Env::new()).unwrap();
             expect!(instructions).to(be_equal_to(vec![
                 Mov(Registry(Rax), Constant(value)),
@@ -152,11 +156,7 @@ mod tests {
 
         #[test]
         fn test_compile_expression_let(value in any::<i64>()) {
-            let let_expr = Let(
-                "x".to_string(),
-                Box::new(Number(value)),
-                Box::new(Identifier("x".to_string()))
-            );
+            let let_expr = Let("x".to_string(), Box::new(Number(value, ())), Box::new(Identifier("x".to_string(), ())), ());
             let instructions = compile_expression(&let_expr, &mut Env::new()).unwrap();
             expect!(instructions).to(be_equal_to(vec![
                 Mov(Registry(Rax), Constant(value)),
@@ -167,11 +167,7 @@ mod tests {
 
         #[test]
         fn test_compile_expression_identifier(value in any::<i64>()) {
-            let expr = Let(
-                "x".to_string(),
-                Box::new(Number(value)),
-                Box::new(Identifier("x".to_string()))
-            );
+            let expr = Let("x".to_string(), Box::new(Number(value, ())), Box::new(Identifier("x".to_string(), ())), ());
             let instructions = compile_expression(&expr, &mut Env::new()).unwrap();
             expect!(instructions).to(be_equal_to(vec![
                 Mov(Registry(Rax), Constant(value)),                // Move the value into Rax
@@ -183,7 +179,7 @@ mod tests {
     proptest!(
         #[test]
         fn test_compile_expression_identifier_not_found(value in any::<i64>()) {
-            let expr = Identifier("x".to_string());
+            let expr = Identifier("x".to_string(), ());
             let result = compile_expression(&expr, & mut Env::new());
             expect!(result).to(be_err());
         }
@@ -192,11 +188,7 @@ mod tests {
     proptest!(
         #[test]
         fn test_compile_expression_mixed(value in any::<i64>()) {
-            let expr = Let(
-                "x".to_string(),
-                Box::new(Increment(Box::new(Number(value)))),
-                Box::new(Decrement(Box::new(Identifier("x".to_string()))))
-            );
+            let expr = Let("x".to_string(), Box::new(Increment(Box::new(Number(value, ())), ())), Box::new(Decrement(Box::new(Identifier("x".to_string(), ())), ())), ());
             let instructions = compile_expression(&expr, &mut Env::new()).unwrap();
             expect!(instructions).to(be_equal_to(vec![
                 Mov(Registry(Rax), Constant(value)),

@@ -1,4 +1,4 @@
-use crate::ast::expr::Expression;
+use crate::ast::expression::Expression;
 use crate::parser::token::Token;
 
 /// Parses a complete expression from the provided token stream and returns the corresponding
@@ -40,7 +40,7 @@ use crate::parser::token::Token;
 /// ## Errors:
 /// - Returns an error if the token stream does not form a valid expression.
 /// - Returns an error if the token stream contains unmatched parentheses or other syntax issues.
-pub fn parse(tokens: &[Token]) -> Result<Expression, String> {
+pub fn parse<T>(tokens: &[Token]) -> Result<Expression<T>, String> {
     let (expression, _) = parse_expression(tokens, 0)?;
     Ok(expression)
 }
@@ -109,7 +109,7 @@ pub fn parse(tokens: &[Token]) -> Result<Expression, String> {
 /// - Returns an error if the token stream does not form a valid expression.
 /// - Returns an error if the token stream contains syntax issues like missing `;`, `=`, or
 ///     parentheses.
-fn parse_expression(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
+fn parse_expression<T>(tokens: &[Token], index: usize) -> Result<(Expression<T>, usize), String> {
     if let Some(Token::Let) = tokens.get(index) {
         parse_let(tokens, index + 1)
     } else {
@@ -171,14 +171,19 @@ fn parse_expression(tokens: &[Token], index: usize) -> Result<(Expression, usize
 /// - Returns an error if the assignment operator (`=`) is missing after the identifier.
 /// - Returns an error if the line-end (`;`) is missing after the assigned expression.
 /// - Returns an error if there are issues parsing the expression or the body of the `let` binding.
-fn parse_let(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
+fn parse_let<T>(tokens: &[Token], index: usize) -> Result<(Expression<T>, usize), String> {
     if let Some(Token::Identifier(ref name)) = tokens.get(index) {
         let next_index = index + 1;
         if let Some(Token::Assign) = tokens.get(next_index) {
-            let (value_expr, body_start) = parse_expression(tokens, next_index + 1)?;
+            let (value_expr, body_start) =
+                parse_expression(tokens, next_index + 1)?;
             if let Some(Token::LineEnd) = tokens.get(body_start) {
-                let (body_expr, final_index) = parse_expression(tokens, body_start + 1)?;
-                Ok((Expression::Let(name.clone(), Box::new(value_expr), Box::new(body_expr)), final_index))
+                let (body_expr, final_index) =
+                    parse_expression(tokens, body_start + 1)?;
+                Ok((
+                    Expression::Let(name.clone(), Box::new(value_expr), Box::new(body_expr), ()),
+                    final_index
+                ))
             } else {
                 Err("Expected ';' at the end of let binding".to_string())
             }
@@ -233,18 +238,18 @@ fn parse_let(tokens: &[Token], index: usize) -> Result<(Expression, usize), Stri
 /// ## Returns:
 /// A `Result` containing a tuple with the parsed `Expression` and the index of the next token to parse,
 /// or a `String` error message if parsing fails.
-fn parse_term(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
+fn parse_term<T>(tokens: &[Token], index: usize) -> Result<(Expression<T>, usize), String> {
     let (mut expression, mut index) = parse_factor(tokens, index)?;
 
     while index < tokens.len() {
         match tokens[index] {
             Token::Increment => {
                 index += 1; // consume '++'
-                expression = Expression::Increment(Box::new(expression));
+                expression = Expression::Increment(Box::new(expression), ());
             }
             Token::Decrement => {
                 index += 1; // consume '--'
-                expression = Expression::Decrement(Box::new(expression));
+                expression = Expression::Decrement(Box::new(expression), ());
             }
             _ => break,
         }
@@ -288,12 +293,14 @@ fn parse_term(tokens: &[Token], index: usize) -> Result<(Expression, usize), Str
 ///
 /// ## Returns:
 /// A tuple containing the parsed expression and the index of the next token to parse.
-fn parse_factor(tokens: &[Token], index: usize) -> Result<(Expression, usize), String> {
+fn parse_factor<T>(tokens: &[Token], index: usize) -> Result<(Expression<T>, usize), String> {
     match tokens.get(index) {
-        Some(Token::Number(value)) => Ok((Expression::Number(*value), index + 1)),
-        Some(Token::Identifier(ref name)) => Ok((Expression::Identifier(name.clone()), index + 1)),
+        Some(Token::Number(value)) => Ok((Expression::Number(*value, ()), index + 1)),
+        Some(Token::Identifier(ref name)) =>
+            Ok((Expression::Identifier(name.clone(), ()), index + 1)),
         Some(Token::LParen) => {
-            let (expression, next_index) = parse_expression(tokens, index + 1)?;
+            let (expression, next_index) =
+                parse_expression(tokens, index + 1)?;
             match tokens.get(next_index) {
                 Some(Token::RParen) => Ok((expression, next_index + 1)),
                 _ => Err("Expected closing parenthesis".to_string()),
@@ -316,7 +323,7 @@ mod tests {
         fn number() {
             let tokens = vec![Token::Number(42)];
             let (expression, next_index) = parse_factor(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Number(42)));
+            expect!(expression).to(be_equal_to(Expression::Number(42, ())));
             expect!(next_index).to(be_equal_to(1));
         }
 
@@ -324,7 +331,7 @@ mod tests {
         fn parenthesized_expression() {
             let tokens = vec![Token::LParen, Token::Number(42), Token::RParen];
             let (expression, next_index) = parse_factor(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Number(42)));
+            expect!(expression).to(be_equal_to(Expression::Number(42, ())));
             expect!(next_index).to(be_equal_to(3));
         }
 
@@ -346,7 +353,7 @@ mod tests {
         fn identifier() {
             let tokens = vec![Token::Identifier("x".to_string())];
             let (expression, next_index) = parse_factor(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Identifier("x".to_string())));
+            expect!(expression).to(be_equal_to(Expression::Identifier("x".to_string(), ())));
             expect!(next_index).to(be_equal_to(1));
         }
     }
@@ -358,7 +365,7 @@ mod tests {
         fn increment() {
             let tokens = vec![Token::Number(42), Token::Increment];
             let (expression, next_index) = parse_term(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Increment(Box::new(Expression::Number(42)))));
+            expect!(expression).to(be_equal_to(Expression::Increment(Box::new(Expression::Number(42, ())), ())));
             expect!(next_index).to(be_equal_to(2));
         }
 
@@ -366,7 +373,7 @@ mod tests {
         fn decrement() {
             let tokens = vec![Token::Number(42), Token::Decrement];
             let (expression, next_index) = parse_term(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Decrement(Box::new(Expression::Number(42)))));
+            expect!(expression).to(be_equal_to(Expression::Decrement(Box::new(Expression::Number(42, ())), ())));
             expect!(next_index).to(be_equal_to(2));
         }
     }
@@ -378,7 +385,7 @@ mod tests {
         fn number() {
             let tokens = vec![Token::Number(42)];
             let (expression, next_index) = parse_expression(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Number(42)));
+            expect!(expression).to(be_equal_to(Expression::Number(42, ())));
             expect!(next_index).to(be_equal_to(1));
         }
 
@@ -386,7 +393,7 @@ mod tests {
         fn increment() {
             let tokens = vec![Token::Number(42), Token::Increment];
             let (expression, next_index) = parse_expression(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Increment(Box::new(Expression::Number(42)))));
+            expect!(expression).to(be_equal_to(Expression::Increment(Box::new(Expression::Number(42, ())), ())));
             expect!(next_index).to(be_equal_to(2));
         }
 
@@ -394,7 +401,7 @@ mod tests {
         fn decrement() {
             let tokens = vec![Token::Number(42), Token::Decrement];
             let (expression, next_index) = parse_expression(&tokens, 0).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Decrement(Box::new(Expression::Number(42)))));
+            expect!(expression).to(be_equal_to(Expression::Decrement(Box::new(Expression::Number(42, ())), ())));
             expect!(next_index).to(be_equal_to(2));
         }
 
@@ -411,8 +418,9 @@ mod tests {
             let (expression, next_index) = parse_expression(&tokens, 0).unwrap();
             expect!(expression).to(be_equal_to(Expression::Let(
                 "x".to_string(),
-                Box::new(Expression::Number(5)),
-                Box::new(Expression::Identifier("x".to_string()))
+                Box::new(Expression::Number(5, ())),
+                Box::new(Expression::Identifier("x".to_string(), ())),
+                ()
             )));
             expect!(next_index).to(be_equal_to(6));
         }
@@ -425,21 +433,21 @@ mod tests {
         fn number() {
             let tokens = vec![Token::Number(42)];
             let expression = parse(&tokens).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Number(42)));
+            expect!(expression).to(be_equal_to(Expression::Number(42, ())));
         }
 
         #[test]
         fn increment() {
             let tokens = vec![Token::Number(42), Token::Increment];
             let expression = parse(&tokens).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Increment(Box::new(Expression::Number(42)))));
+            expect!(expression).to(be_equal_to(Expression::Increment(Box::new(Expression::Number(42, ())), ())));
         }
 
         #[test]
         fn decrement() {
             let tokens = vec![Token::Number(42), Token::Decrement];
             let expression = parse(&tokens).unwrap();
-            expect!(expression).to(be_equal_to(Expression::Decrement(Box::new(Expression::Number(42)))));
+            expect!(expression).to(be_equal_to(Expression::Decrement(Box::new(Expression::Number(42, ())), ())));
         }
     }
 }
