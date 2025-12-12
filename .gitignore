@@ -84,3 +84,20 @@ rust-project.json
 .idea
 *.int
 build/
+proptest-regressions/
+
+### OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### Editor files
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-*
+
+### Environment files
+.env
+.env.local

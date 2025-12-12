@@ -82,9 +82,12 @@ use Reg::Rax;
 /// The `Identifier` variant expects the variable to have been previously defined in the
 /// environment. If the identifier is not found, the function may return an error or panic depending
 /// on the implementation.
-pub(crate) fn compile_expression<T>(expression: &Expression<T>, env: &mut Env) -> Result<Vec<Instruction>, ()> {
+pub(crate) fn compile_expression<T>(
+    expression: &dyn Expression<T>,
+    env: &mut Env
+) -> Result<Vec<Instruction>, ()> {
     match expression {
-        Expression::Number(value, _) => Ok(vec![Instruction::Mov(Arg::Registry(Reg::Rax), Arg::Constant(*value))]),
+        Expression::Number(value, _) => Ok(vec![Mov(Registry(Rax), Constant(*value))]),
         Expression::Increment(expr, _) => {
             let mut instructions = compile_expression(expr, env)?;
             instructions.push(Instruction::Inc(Arg::Registry(Reg::Rax)));
@@ -121,10 +124,11 @@ pub(crate) fn compile_expression<T>(expression: &Expression<T>, env: &mut Env) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use expectest::prelude::*;
-    use proptest::prelude::*;
     use crate::ast::increment::Increment;
     use crate::ast::number::Number;
+    use expectest::prelude::*;
+    use proptest::prelude::*;
+    use crate::ast::decrement::Decrement;
 
     proptest!(
         #[test]
